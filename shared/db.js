@@ -199,8 +199,14 @@ const MilkCards = {
    Seed demo data into local cache (first run)
 ══════════════════════════════════════════ */
 function seedLocalDemo() {
-  if (Sheet.localAll('patients').length) return;
   const today = todayStr();
+  // Reset orders/milkcards cache ถ้าวันไม่ตรง (ข้ามวัน)
+  const existingOrders = Sheet.localAll('orders');
+  if (existingOrders.length && existingOrders.every(o => o.date !== today)) {
+    Cache.set('orders', []);
+    Cache.set('milkcards', []);
+  }
+  if (Sheet.localAll('patients').length) return;
   Cache.set('patients', [
     { id:'p01', hn:'C2645501', room:'NICU01-01', firstName:'อินทรา',   lastName:'มีสุข',  dob:'22/04/69', dobTime:'14:30', religion:'พุทธ',    allergy:'NKA',       createdAt:'2026-06-01T08:00:00Z', updatedAt:'' },
     { id:'p02', hn:'C2645502', room:'NICU01-02', firstName:'เพ็งสุข',  lastName:'ใจดี',   dob:'19/03/69', dobTime:'',     religion:'พุทธ',    allergy:'NKA',       createdAt:'2026-06-01T08:05:00Z', updatedAt:'' },

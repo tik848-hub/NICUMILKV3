@@ -446,7 +446,8 @@ function reenterOrder(id) {
 ══════════════════════════════════════════ */
 function _renderApprovePage() {
   const today  = todayStr();
-  const orders = Orders.forDate(today);
+  let orders = Orders.forDate(today);
+  if (!orders.length) orders = Orders.allLocal();
   document.getElementById('apv-pend').textContent = orders.filter(o=>o.status==='pending').length;
   document.getElementById('apv-appr').textContent = orders.filter(o=>o.status==='approved').length;
   document.getElementById('apv-rej').textContent  = orders.filter(o=>o.status==='rejected').length;
