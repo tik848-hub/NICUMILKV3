@@ -173,7 +173,7 @@ function receiveAndPrint(orderId) {
   if (!feedSchedule.length) feedSchedule=allocateFeeds({freq:o.freq,milkType:o.formula,limitBM:o.limitBM,limitBMFeeds:parseInt(o.limitBMFeeds)||0,feedTimes:defaultFeedTimes(parseInt(o.freq)||8)});
   let mc;
   if (existing.length){ mc=existing[0]; mc.printedAt=nowTs(); }
-  else { mc={id:uid(),orderId,ptId:o.ptId,hn:o.hn,name:p.firstName+' '+p.lastName,dob:p.dob,room:p.room,formula:o.formula,formulaFm:o.formulaFm||'',vol:o.vol,route:o.route,freq:parseInt(o.freq)||8,mouthCare:o.mouthCare,mouthCareFreq:o.mouthCareFreq,date:todayStr(),feeds:feedSchedule,qr:p.hn,printedAt:nowTs(),nutritionReceived:true}; }
+  else { mc={id:uid(),orderId,ptId:o.ptId,hn:o.hn,name:p.firstName+' '+p.lastName,dob:p.dob,room:p.room,formula:o.formula,formulaFm:o.formulaFm||'',vol:o.vol,route:o.route,freq:parseInt(o.freq)||8,mouthCare:o.mouthCare,mouthCareFreq:o.mouthCareFreq,date:todayStr(),feeds:feedSchedule,qr:genWristbandQR(p.hn),printedAt:nowTs(),nutritionReceived:true}; }
   MilkCards.save(mc);
   toast('✓ บัตรนม '+p.firstName+' · '+mc.freq+' ใบ');
   _renderProducePage(); viewCards(orderId);
@@ -185,26 +185,32 @@ function viewCards(orderId) {
   const p=Patients.find(mc.ptId); const age=calcAge(mc.dob);
   const section=document.getElementById('prod-cards-section');
   const grid=document.getElementById('prod-card-grid');
-  grid.innerHTML=feeds.map(f=>{
-    const isBM=f.milkType?.includes('นมแม่');
-    const typeCls=f.milkType?.includes('นมแม่')?'mc-type-bm':f.milkType==='NPO'?'mc-type-npo':'mc-type-fm';
-    const qrPat=[1,1,1,0,1,1,0,1,0,0,0,1,1,1,0,1,0,1,1,0,0,0,1,0,1];
-    const qrHtml=`<div class="qr-block">${qrPat.map(v=>`<div class="qr-px" style="background:${v?'#000':'#fff'}"></div>`).join('')}</div>`;
+  const showBottle=needsBottleCalc(mc.route);
+  grid.innerHTML=feeds.map((f,fi)=>{
+    const typeCls=f.milkType?.includes('นมแม่')||f.milkType==='DBM'?'mc-type-bm':f.milkType==='NPO'?'mc-type-npo':'mc-type-fm';
+    const qrId='qr-n-'+orderId+'-'+fi;
     return `<div class="milk-card">
       <div class="mc-header"><span>วันที่ ${mc.date}</span><span>มื้อที่ ${f.no}</span></div>
-      <div class="mc-hn">HN: ${mc.hn}</div>
-      <div style="font-size:10.5px;color:var(--text-2)">${mc.name} · ${age.label}</div>
+      <div class="mc-hn">${mc.qr||mc.hn}</div>
+      <div style="font-size:10px;color:var(--text-2)">${mc.name} · ${age.label}</div>
       <div style="font-size:9.5px;color:var(--text-3)">${mc.room} · ${mc.route}</div>
       <div class="mc-formula">${mc.formula}${mc.formulaFm?' '+mc.formulaFm:''}</div>
-      <div style="font-size:10px;color:var(--text-2)">${mc.vol} mL${mc.route==='Bottle'?' (ขวดละ '+(calcBottleTotal(mc.vol))+' mL)':''}${mc.mouthCare?' + MC '+mc.mouthCareFreq:''}</div>
+      <div style="font-size:10px;color:var(--text-2)">${mc.vol} mL${showBottle?' (ขวดละ '+(calcBottleTotal(mc.vol))+' mL)':''}${mc.mouthCare?' + MC '+mc.mouthCareFreq:''}</div>
       <div class="mc-meal-row">
         <span class="mc-time">${f.time} น.</span>
-        <span class="mc-type ${typeCls}">${f.milkType?.includes('นมแม่')?'🍼 BM':f.milkType==='NPO'?'NPO':'🥛 FM'}</span>
-        <div style="display:flex;align-items:center;gap:3px">${qrHtml}<div class="mc-checkbox"></div></div>
+        <span class="mc-type ${typeCls}">${f.milkType?.includes('นมแม่')||f.milkType==='DBM'?'🍼 BM':f.milkType==='NPO'?'NPO':'🥛 FM'}</span>
+        <div style="display:flex;align-items:center;gap:3px"><div id="${qrId}" style="width:36px;height:36px"></div><div class="mc-checkbox"></div></div>
       </div>
     </div>`;
   }).join('');
   section.style.display='block'; section.scrollIntoView({behavior:'smooth'});
+  const qrText=mc.qr||genWristbandQR(mc.hn);
+  setTimeout(()=>{
+    feeds.forEach((_,fi)=>{
+      const el=document.getElementById('qr-n-'+orderId+'-'+fi);
+      if(el&&typeof QRCode!=='undefined'){el.innerHTML='';new QRCode(el,{text:qrText,width:36,height:36,correctLevel:QRCode.CorrectLevel.L});}
+    });
+  },100);
 }
 function printCards() { window.print(); }
 

@@ -284,8 +284,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('ord-vol')?.addEventListener('input', _calcTotal);
   document.getElementById('ord-freq')?.addEventListener('input', ()=>{ _calcTotal(); _renderFeedChips(); });
   document.getElementById('ord-route')?.addEventListener('change', ()=>{
-    const isBottle = document.getElementById('ord-route').value==='Bottle';
-    document.getElementById('ord-bottle-info').style.display = isBottle?'block':'none';
     _calcTotal();
   });
   document.getElementById('ord-limit-bm')?.addEventListener('change', ()=>{
@@ -320,12 +318,15 @@ function _calcTotal() {
   const freq  = parseInt(document.getElementById('ord-freq')?.value)||0;
   const route = document.getElementById('ord-route')?.value||'';
   const el    = document.getElementById('ord-total');
+  const bottleInfo = document.getElementById('ord-bottle-info');
   if (!el) return;
+  const isCalc = needsBottleCalc(route);
+  if (bottleInfo) bottleInfo.style.display = isCalc ? 'block' : 'none';
   if (vol&&freq) {
     const base  = vol*freq;
     const total = calcBottleTotal(vol);
-    el.innerHTML = route==='Bottle'
-      ? `ปริมาณรวม: ${base} mL/วัน · Bottle: <strong>${total} mL/ขวด</strong> (${vol}+${total-vol} mL)`
+    el.innerHTML = isCalc
+      ? `ปริมาณรวม: ${base} mL/วัน · ${route}: <strong>${total} mL/ขวด</strong> (${vol}+${total-vol} mL)`
       : `ปริมาณรวม: ${base} mL/วัน`;
   } else el.innerHTML='';
 }
@@ -378,8 +379,8 @@ function submitOrder() {
     id: _editOrder?_editOrder.id:uid(), ptId, hn:p.hn,
     date: todayStr(), milkType:bm, formula:bm, formulaFm:fm,
     vol, freq, route,
-    bottleExtra: route==='Bottle',
-    bottleTotal: route==='Bottle' ? calcBottleTotal(vol) : vol,
+    bottleExtra: needsBottleCalc(route),
+    bottleTotal: needsBottleCalc(route) ? calcBottleTotal(vol) : vol,
     mouthCare:mc, mouthCareFreq:mcFreq,
     breastFeed:bf, limitBM, limitBMFeeds,
     feedSchedule: JSON.stringify(feedSchedule),
@@ -391,7 +392,7 @@ function submitOrder() {
   _editOrder=null;
   const box = document.getElementById('ord-result');
   box.className='result-box show success';
-  box.innerHTML=`<i class="ti ti-circle-check" aria-hidden="true"></i><div class="result-title">ส่งคำสั่งนมสำเร็จ</div><div class="result-detail">${p.firstName} · ${bm}${fm?' '+fm:''}<br>${vol} mL × ${freq} มื้อ · ${route}${route==='Bottle'?` · ขวดละ ${calcBottleTotal(vol)} mL`:''}</div>`;
+  box.innerHTML=`<i class="ti ti-circle-check" aria-hidden="true"></i><div class="result-title">ส่งคำสั่งนมสำเร็จ</div><div class="result-detail">${p.firstName} · ${bm}${fm?' '+fm:''}<br>${vol} mL × ${freq} มื้อ · ${route}${needsBottleCalc(route)?` · ขวดละ ${calcBottleTotal(vol)} mL`:''}</div>`;
   setTimeout(()=>box.className='result-box',5000);
   document.getElementById('ord-patient').value='';
   document.getElementById('ord-pt-info').style.display='none';
@@ -566,7 +567,7 @@ function receiveAndPrint(orderId) {
       vol:o.vol, route:o.route, freq:parseInt(o.freq)||8,
       mouthCare:o.mouthCare, mouthCareFreq:o.mouthCareFreq,
       date:todayStr(), feeds:feedSchedule,
-      qr: p.hn,   // QR = HN (matches wristband format A00C...)
+      qr: genWristbandQR(p.hn),  // format: A00C{HN} ตรงกับป้ายข้อมือ
       printedAt:nowTs(), nutritionReceived:true };
   }
   MilkCards.save(mc);
@@ -583,29 +584,41 @@ function viewCards(orderId) {
   const grid = document.getElementById('prod-card-grid');
   const p = Patients.find(mc.ptId);
   const age = calcAge(mc.dob);
-  grid.innerHTML = feeds.map(f => {
-    const isBM = f.milkType?.includes('นมแม่')||f.milkType==='DBM'||!f.milkType;
+  grid.innerHTML = feeds.map((f,fi) => {
     const typeLabel = f.milkType||mc.formula;
-    const typeCls = f.milkType?.includes('นมแม่')?'mc-type-bm': f.milkType==='NPO'?'mc-type-npo':'mc-type-fm';
-    // QR pattern (decorative mini)
-    const qrPat = [1,1,1,0,1,1,0,1,0,0,0,1,1,1,0,1,0,1,1,0,0,0,1,0,1];
-    const qrHtml = `<div class="qr-block">${qrPat.map(v=>`<div class="qr-px" style="background:${v?'#000':'#fff'}"></div>`).join('')}</div>`;
+    const typeCls = f.milkType?.includes('นมแม่')||f.milkType==='DBM'?'mc-type-bm': f.milkType==='NPO'?'mc-type-npo':'mc-type-fm';
+    const qrId = 'qr-card-'+orderId+'-'+fi;
+    const showBottle = needsBottleCalc(mc.route);
     return `<div class="milk-card">
       <div class="mc-header"><span>วันที่ ${mc.date}</span><span>มื้อที่ ${f.no}</span></div>
-      <div class="mc-hn">HN: ${mc.hn}</div>
-      <div style="font-size:10.5px;color:var(--text-2)">${mc.name} · ${age.label}</div>
+      <div class="mc-hn">${mc.qr||mc.hn}</div>
+      <div style="font-size:10px;color:var(--text-2)">${mc.name} · ${age.label}</div>
       <div style="font-size:9.5px;color:var(--text-3)">${mc.room} · ${mc.route}</div>
       <div class="mc-formula">${mc.formula}${mc.formulaFm?' '+mc.formulaFm:''}</div>
-      <div style="font-size:10px;color:var(--text-2)">${mc.vol} mL${mc.route==='Bottle'?' (ขวดละ '+(calcBottleTotal(mc.vol))+' mL)':''}${mc.mouthCare?' + MC '+mc.mouthCareFreq:''}</div>
+      <div style="font-size:10px;color:var(--text-2)">${mc.vol} mL${showBottle?' (ขวดละ '+(calcBottleTotal(mc.vol))+' mL)':''}${mc.mouthCare?' + MC '+mc.mouthCareFreq:''}</div>
       <div class="mc-meal-row">
         <span class="mc-time">${f.time} น.</span>
-        <span class="mc-type ${typeCls}">${typeLabel.includes('นมแม่')?'🍼 BM':typeLabel==='NPO'?'NPO':'🥛 FM'}</span>
-        <div style="display:flex;align-items:center;gap:3px">${qrHtml}<div class="mc-checkbox ${f.status==='fed'?'fed':''}"></div></div>
+        <span class="mc-type ${typeCls}">${typeLabel.includes('นมแม่')||typeLabel==='DBM'?'🍼 BM':typeLabel==='NPO'?'NPO':'🥛 FM'}</span>
+        <div style="display:flex;align-items:center;gap:3px">
+          <div id="${qrId}" style="width:36px;height:36px"></div>
+          <div class="mc-checkbox ${f.status==='fed'?'fed':''}"></div>
+        </div>
       </div>
     </div>`;
   }).join('');
   section.style.display='block';
   section.scrollIntoView({behavior:'smooth'});
+  // Generate real QR codes after render
+  const qrText = mc.qr || genWristbandQR(mc.hn);
+  setTimeout(()=>{
+    feeds.forEach((_,fi)=>{
+      const el = document.getElementById('qr-card-'+orderId+'-'+fi);
+      if (el && typeof QRCode !== 'undefined') {
+        el.innerHTML='';
+        new QRCode(el,{text:qrText,width:36,height:36,correctLevel:QRCode.CorrectLevel.L});
+      }
+    });
+  }, 100);
 }
 function printCards() { window.print(); }
 
@@ -700,14 +713,21 @@ function _scanLoop() {
 }
 function _handleFeedQR(raw) {
   _setSteps('feed-',[1,1,1,2]);
-  // QR from wristband: "A00C2646475" → match by HN or starts-with
-  const pt = Patients.match(raw) ||
-    Patients.all().find(p => raw.includes(p.hn) || p.hn.includes(raw));
+  // QR ป้ายข้อมือ format: A00C2646475
+  // Match กับ: qr field ของ milkcard, หรือ HN, หรือ genWristbandQR(HN)
+  const rawClean = raw.trim().toUpperCase();
+  const pt = Patients.all().find(p => {
+    const wb = genWristbandQR(p.hn).toUpperCase();
+    return wb === rawClean ||
+           p.hn.toUpperCase() === rawClean ||
+           rawClean.includes(p.hn.toUpperCase()) ||
+           rawClean.replace(/^A00C/,'') === p.hn.replace(/^[A-Za-z0]+/,'');
+  }) || Patients.match(raw);
   const res = document.getElementById('feed-scan-result');
   document.getElementById('feed-cam-view').style.display='none';
   if (!pt) {
     res.className='result-box show error';
-    res.innerHTML=`<i class="ti ti-alert-circle" aria-hidden="true"></i><div class="result-title">ไม่พบผู้ป่วย</div><div class="result-detail">QR: "${raw}"</div><div class="result-actions"><button class="btn btn-sm" onclick="retryFeedScan()"><i class="ti ti-refresh" aria-hidden="true"></i> สแกนใหม่</button><button class="btn btn-sm" onclick="cancelFeedScan()">ยกเลิก</button></div>`;
+    res.innerHTML=`<i class="ti ti-alert-circle" aria-hidden="true"></i><div class="result-title">ไม่พบผู้ป่วย</div><div class="result-detail">QR อ่านได้: "${raw}"<br>ไม่ตรงกับผู้ป่วยในระบบ</div><div class="result-actions"><button class="btn btn-sm" onclick="retryFeedScan()"><i class="ti ti-refresh" aria-hidden="true"></i> สแกนใหม่</button><button class="btn btn-sm" onclick="cancelFeedScan()">ยกเลิก</button></div>`;
     _setSteps('feed-',[1,1,0,0]); return;
   }
   if (_scanTarget && _scanTarget.ptId!==pt.id) {

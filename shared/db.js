@@ -53,8 +53,18 @@ function roundTo5(n) {
   return r;
 }
 
-/* Bottle total = vol * 1.20, rounded to nearest 5 */
+/* Bottle / Cup feeding total = vol * 1.20, rounded to nearest 5 */
 function calcBottleTotal(vol) { return roundTo5(Math.ceil(vol * 1.20)); }
+function needsBottleCalc(route) { return route === 'Bottle' || route === 'Cup feeding'; }
+
+/* Generate QR content matching wristband format: A00C{HN}
+   Hospital wristband example: A00C2646475
+   We store HN as-is (e.g. C2645501) → QR = A00C2645501            */
+function genWristbandQR(hn) {
+  if (!hn) return '';
+  const clean = hn.replace(/^[A-Za-z0]+/, ''); // strip leading letters/zeros
+  return 'A00C' + clean;
+}
 
 /* ══════════════════════════════════════════
    Local Cache (localStorage)
